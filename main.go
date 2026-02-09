@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -247,17 +249,30 @@ func watch() {
 		return
 	}
 
-	fmt.Printf("Watching %s session...\n", s.sessionType)
+	// Handle Ctrl+C gracefully
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-sigChan
+		fmt.Print("\033[?25h") // Show cursor
+		fmt.Println("\nInterrupted")
+		os.Exit(0)
+	}()
+
+	// Hide cursor for cleaner display
+	fmt.Print("\033[?25l")
+	defer fmt.Print("\033[?25h") // Show cursor on exit
 
 	for {
 		s, err = readState()
 		if err != nil {
 			// Timer was stopped
+			fmt.Println("\nTimer stopped")
 			return
 		}
 
 		if s.paused {
-			fmt.Println("Timer paused")
+			fmt.Println("\nTimer paused")
 			return
 		}
 
@@ -265,6 +280,7 @@ func watch() {
 		remaining := s.duration - elapsed
 
 		if remaining <= 0 {
+			clearLine()
 			title := strings.Title(s.sessionType) + " Complete!"
 			message := "Time for a " + oppositeSession(s.sessionType)
 			recordSession(s.sessionType, s.duration)
@@ -274,8 +290,33 @@ func watch() {
 			return
 		}
 
+		// Display live countdown
+		clearLine()
+		progress := float64(elapsed) / float64(s.duration)
+		bar := renderProgressBar(progress, 20)
+		fmt.Printf("\r  %s  %s  %s",
+			strings.Title(s.sessionType),
+			formatDuration(remaining),
+			bar)
+
 		time.Sleep(1 * time.Second)
 	}
+}
+
+func clearLine() {
+	fmt.Print("\r\033[K") // Carriage return + clear to end of line
+}
+
+func renderProgressBar(progress float64, width int) string {
+	filled := int(progress * float64(width))
+	if filled > width {
+		filled = width
+	}
+
+	bar := strings.Repeat("=", filled)
+	empty := strings.Repeat("-", width-filled)
+
+	return fmt.Sprintf("[%s%s]", bar, empty)
 }
 
 func oppositeSession(sessionType string) string {
