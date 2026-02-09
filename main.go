@@ -4,6 +4,8 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -25,7 +27,7 @@ type state struct {
 func main() {
 	if len(os.Args) < 2 {
 		fmt.Println("Usage: pomogori <command> [options]")
-		fmt.Println("Commands: work, break, pause, resume, status, stop")
+		fmt.Println("Commands: work, break, pause, resume, status, watch, stop")
 		return
 	}
 
@@ -55,6 +57,9 @@ func main() {
 
 	case "stop":
 		stop()
+
+	case "watch":
+		watch()
 
 	default:
 		fmt.Printf("Unknown command: %s\n", cmd)
@@ -155,6 +160,55 @@ func stop() {
 	fmt.Println("Timer stopped")
 }
 
+func watch() {
+	s, err := readState()
+	if err != nil {
+		fmt.Println("No timer running")
+		return
+	}
+
+	if s.paused {
+		fmt.Println("Timer is paused - resume first")
+		return
+	}
+
+	fmt.Printf("Watching %s session...\n", s.sessionType)
+
+	for {
+		s, err = readState()
+		if err != nil {
+			// Timer was stopped
+			return
+		}
+
+		if s.paused {
+			fmt.Println("Timer paused")
+			return
+		}
+
+		elapsed := int(time.Now().Unix() - s.startTime)
+		remaining := s.duration - elapsed
+
+		if remaining <= 0 {
+			title := strings.Title(s.sessionType) + " Complete!"
+			message := "Time for a " + oppositeSession(s.sessionType)
+			notify(title, message)
+			fmt.Println(title)
+			os.Remove(stateFile)
+			return
+		}
+
+		time.Sleep(1 * time.Second)
+	}
+}
+
+func oppositeSession(sessionType string) string {
+	if sessionType == "work" {
+		return "break"
+	}
+	return "work session"
+}
+
 func readState() (state, error) {
 	data, err := os.ReadFile(stateFile)
 	if err != nil {
@@ -190,4 +244,22 @@ func formatDuration(seconds int) string {
 	m := seconds / 60
 	s := seconds % 60
 	return fmt.Sprintf("%02d:%02d", m, s)
+}
+
+func notify(title, message string) {
+	switch runtime.GOOS {
+	case "darwin":
+		// macOS: use osascript
+		script := fmt.Sprintf(`display notification "%s" with title "%s"`, message, title)
+		exec.Command("osascript", "-e", script).Run()
+
+	case "linux":
+		// Linux: use notify-send (common on most desktop environments)
+		exec.Command("notify-send", title, message).Run()
+
+	case "windows":
+		// Windows: use PowerShell
+		script := fmt.Sprintf(`[System.Reflection.Assembly]::LoadWithPartialName('System.Windows.Forms'); [System.Windows.Forms.MessageBox]::Show('%s','%s')`, message, title)
+		exec.Command("powershell", "-Command", script).Run()
+	}
 }
