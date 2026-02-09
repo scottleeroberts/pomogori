@@ -5,18 +5,80 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
 	"time"
 )
 
-const (
-	stateFile            = "/tmp/pomogori.state"
-	historyFile          = "/tmp/pomogori.history"
-	workDurationMinutes  = 25
-	breakDurationMinutes = 5
+var (
+	dataDir     string
+	stateFile   string
+	historyFile string
+	configFile  string
+	cfg         config
 )
+
+type config struct {
+	WorkMinutes  int
+	BreakMinutes int
+}
+
+func init() {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		home = "."
+	}
+
+	dataDir = filepath.Join(home, ".pomogori")
+	stateFile = filepath.Join(dataDir, "state")
+	historyFile = filepath.Join(dataDir, "history")
+	configFile = filepath.Join(dataDir, "config")
+
+	// Ensure data directory exists
+	os.MkdirAll(dataDir, 0755)
+
+	// Load config with defaults
+	cfg = config{
+		WorkMinutes:  25,
+		BreakMinutes: 5,
+	}
+	loadConfig()
+}
+
+func loadConfig() {
+	data, err := os.ReadFile(configFile)
+	if err != nil {
+		return // Use defaults
+	}
+
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) != 2 {
+			continue
+		}
+
+		key := strings.TrimSpace(parts[0])
+		value := strings.TrimSpace(parts[1])
+
+		switch key {
+		case "work_minutes":
+			if v, err := strconv.Atoi(value); err == nil {
+				cfg.WorkMinutes = v
+			}
+		case "break_minutes":
+			if v, err := strconv.Atoi(value); err == nil {
+				cfg.BreakMinutes = v
+			}
+		}
+	}
+}
 
 type state struct {
 	startTime   int64
@@ -34,7 +96,7 @@ type historyEntry struct {
 func main() {
 	if len(os.Args) < 2 {
 		fmt.Println("Usage: pomogori <command> [options]")
-		fmt.Println("Commands: work, break, pause, resume, status, watch, stop, stats")
+		fmt.Println("Commands: work, break, pause, resume, status, watch, stop, stats, config")
 		return
 	}
 
@@ -43,13 +105,13 @@ func main() {
 	switch cmd {
 	case "work":
 		startCmd := flag.NewFlagSet("work", flag.ExitOnError)
-		duration := startCmd.Int("d", workDurationMinutes, "duration in minutes")
+		duration := startCmd.Int("d", cfg.WorkMinutes, "duration in minutes")
 		startCmd.Parse(os.Args[2:])
 		start("work", *duration*60)
 
 	case "break":
 		breakCmd := flag.NewFlagSet("break", flag.ExitOnError)
-		duration := breakCmd.Int("d", breakDurationMinutes, "duration in minutes")
+		duration := breakCmd.Int("d", cfg.BreakMinutes, "duration in minutes")
 		breakCmd.Parse(os.Args[2:])
 		start("break", *duration*60)
 
@@ -70,6 +132,9 @@ func main() {
 
 	case "stats":
 		stats()
+
+	case "config":
+		showConfig()
 
 	default:
 		fmt.Printf("Unknown command: %s\n", cmd)
@@ -259,6 +324,24 @@ func readHistory() []historyEntry {
 	}
 
 	return entries
+}
+
+func showConfig() {
+	fmt.Println("=== Pomogori Config ===")
+	fmt.Println()
+	fmt.Printf("Config file: %s\n", configFile)
+	fmt.Printf("Data dir:    %s\n", dataDir)
+	fmt.Println()
+	fmt.Println("Current settings:")
+	fmt.Printf("  work_minutes  = %d\n", cfg.WorkMinutes)
+	fmt.Printf("  break_minutes = %d\n", cfg.BreakMinutes)
+	fmt.Println()
+
+	if _, err := os.Stat(configFile); os.IsNotExist(err) {
+		fmt.Println("No config file found. Create one with:")
+		fmt.Printf("  echo 'work_minutes = 25' >> %s\n", configFile)
+		fmt.Printf("  echo 'break_minutes = 5' >> %s\n", configFile)
+	}
 }
 
 func stats() {
