@@ -142,6 +142,9 @@ func main() {
 	case "help", "h", "-h", "--help":
 		printHelp()
 
+	case "i3blocks", "i3b":
+		i3blocks()
+
 	case "version", "v", "-v", "--version":
 		fmt.Printf("pomogori %s\n", version)
 
@@ -563,5 +566,36 @@ func notify(title, message string) {
 		// Windows: use PowerShell
 		script := fmt.Sprintf(`[System.Reflection.Assembly]::LoadWithPartialName('System.Windows.Forms'); [System.Windows.Forms.MessageBox]::Show('%s','%s')`, message, title)
 		exec.Command("powershell", "-Command", script).Run()
+	}
+}
+
+func i3blocks() {
+	s, err := readState()
+	if err != nil {
+		return // No output when no timer
+	}
+
+	var remaining int
+	if s.paused {
+		remaining = s.duration
+	} else {
+		elapsed := int(time.Now().Unix() - s.startTime)
+		remaining = s.duration - elapsed
+	}
+
+	if remaining <= 0 {
+		return // No output when complete
+	}
+
+	icon := "🍅"
+	if s.sessionType == "break" {
+		icon = "☕"
+	}
+
+	timeStr := formatDuration(remaining)
+	if s.paused {
+		fmt.Printf("%s %s ⏸️\n", icon, timeStr)
+	} else {
+		fmt.Printf("%s %s\n", icon, timeStr)
 	}
 }
