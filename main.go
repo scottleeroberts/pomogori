@@ -14,6 +14,8 @@ import (
 	"time"
 )
 
+const version = "1.0.0"
+
 var (
 	dataDir     string
 	stateFile   string
@@ -97,40 +99,39 @@ type historyEntry struct {
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Println("Usage: pomogori <command> [options]")
-		fmt.Println("Commands: work, break, pause, resume, status, watch, stop, stats, config")
+		printUsage()
 		return
 	}
 
 	cmd := os.Args[1]
 
 	switch cmd {
-	case "work":
+	case "work", "w":
 		startCmd := flag.NewFlagSet("work", flag.ExitOnError)
 		duration := startCmd.Int("d", cfg.WorkMinutes, "duration in minutes")
 		startCmd.Parse(os.Args[2:])
 		start("work", *duration*60)
 
-	case "break":
+	case "break", "b":
 		breakCmd := flag.NewFlagSet("break", flag.ExitOnError)
 		duration := breakCmd.Int("d", cfg.BreakMinutes, "duration in minutes")
 		breakCmd.Parse(os.Args[2:])
 		start("break", *duration*60)
 
-	case "status":
+	case "status", "s":
 		status()
 
-	case "pause":
+	case "pause", "p":
 		pause()
 
-	case "resume":
+	case "resume", "r":
 		resume()
-
-	case "stop":
-		stop()
 
 	case "watch":
 		watch()
+
+	case "stop":
+		stop()
 
 	case "stats":
 		stats()
@@ -138,9 +139,72 @@ func main() {
 	case "config":
 		showConfig()
 
+	case "help", "h", "-h", "--help":
+		printHelp()
+
+	case "version", "v", "-v", "--version":
+		fmt.Printf("pomogori %s\n", version)
+
 	default:
 		fmt.Printf("Unknown command: %s\n", cmd)
+		fmt.Println("Run 'pomogori help' for usage")
 	}
+}
+
+func printUsage() {
+	fmt.Println("pomogori - A simple pomodoro timer for the terminal")
+	fmt.Println()
+	fmt.Println("Usage: pomogori <command> [options]")
+	fmt.Println()
+	fmt.Println("Run 'pomogori help' for detailed usage")
+}
+
+func printHelp() {
+	help := `pomogori - A simple pomodoro timer for the terminal
+
+USAGE
+    pomogori <command> [options]
+
+COMMANDS
+    work, w      Start a work session (default: %d minutes)
+    break, b     Start a break session (default: %d minutes)
+    status, s    Show current timer status
+    pause, p     Pause the current timer
+    resume, r    Resume a paused timer
+    watch        Watch timer with live countdown display
+    stop         Stop and discard the current timer
+    stats        Show session statistics
+    config       Show configuration and file paths
+    help, h      Show this help message
+    version, v   Show version
+
+OPTIONS
+    -d <minutes>   Set custom duration for work/break
+
+EXAMPLES
+    pomogori work              Start a 25-minute work session
+    pomogori w -d 50           Start a 50-minute work session
+    pomogori break             Start a 5-minute break
+    pomogori b -d 15           Start a 15-minute break
+    pomogori watch             Watch the timer countdown
+    pomogori status            Check remaining time
+
+WORKFLOW
+    1. pomogori work           Start working
+    2. pomogori watch          Watch the countdown (optional)
+    3. [notification]          Get notified when done
+    4. pomogori break          Take a break
+    5. Repeat!
+
+CONFIG
+    Edit ~/.pomogori/config to change defaults:
+        work_minutes = 25
+        break_minutes = 5
+
+VERSION
+    %s
+`
+	fmt.Printf(help, cfg.WorkMinutes, cfg.BreakMinutes, version)
 }
 
 func start(sessionType string, duration int) {
