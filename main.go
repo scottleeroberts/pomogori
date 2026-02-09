@@ -13,6 +13,7 @@ import (
 
 const (
 	stateFile            = "/tmp/pomogori.state"
+	historyFile          = "/tmp/pomogori.history"
 	workDurationMinutes  = 25
 	breakDurationMinutes = 5
 )
@@ -24,10 +25,16 @@ type state struct {
 	paused      bool
 }
 
+type historyEntry struct {
+	timestamp   int64
+	duration    int
+	sessionType string
+}
+
 func main() {
 	if len(os.Args) < 2 {
 		fmt.Println("Usage: pomogori <command> [options]")
-		fmt.Println("Commands: work, break, pause, resume, status, watch, stop")
+		fmt.Println("Commands: work, break, pause, resume, status, watch, stop, stats")
 		return
 	}
 
@@ -60,6 +67,9 @@ func main() {
 
 	case "watch":
 		watch()
+
+	case "stats":
+		stats()
 
 	default:
 		fmt.Printf("Unknown command: %s\n", cmd)
@@ -192,6 +202,7 @@ func watch() {
 		if remaining <= 0 {
 			title := strings.Title(s.sessionType) + " Complete!"
 			message := "Time for a " + oppositeSession(s.sessionType)
+			recordSession(s.sessionType, s.duration)
 			notify(title, message)
 			fmt.Println(title)
 			os.Remove(stateFile)
@@ -207,6 +218,109 @@ func oppositeSession(sessionType string) string {
 		return "break"
 	}
 	return "work session"
+}
+
+func recordSession(sessionType string, duration int) {
+	// Append to history file: timestamp|duration|sessionType
+	entry := fmt.Sprintf("%d|%d|%s\n", time.Now().Unix(), duration, sessionType)
+
+	f, err := os.OpenFile(historyFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+
+	f.WriteString(entry)
+}
+
+func readHistory() []historyEntry {
+	data, err := os.ReadFile(historyFile)
+	if err != nil {
+		return nil
+	}
+
+	var entries []historyEntry
+	for _, line := range strings.Split(string(data), "\n") {
+		if line == "" {
+			continue
+		}
+		parts := strings.Split(line, "|")
+		if len(parts) != 3 {
+			continue
+		}
+
+		ts, _ := strconv.ParseInt(parts[0], 10, 64)
+		dur, _ := strconv.Atoi(parts[1])
+		entries = append(entries, historyEntry{
+			timestamp:   ts,
+			duration:    dur,
+			sessionType: parts[2],
+		})
+	}
+
+	return entries
+}
+
+func stats() {
+	entries := readHistory()
+	if len(entries) == 0 {
+		fmt.Println("No completed sessions yet")
+		return
+	}
+
+	// Calculate stats
+	var totalWork, totalBreak int
+	var workCount, breakCount int
+	var todayWork, todayBreak int
+
+	today := time.Now().Truncate(24 * time.Hour)
+
+	for _, e := range entries {
+		if e.sessionType == "work" {
+			totalWork += e.duration
+			workCount++
+			if time.Unix(e.timestamp, 0).After(today) {
+				todayWork += e.duration
+			}
+		} else {
+			totalBreak += e.duration
+			breakCount++
+			if time.Unix(e.timestamp, 0).After(today) {
+				todayBreak += e.duration
+			}
+		}
+	}
+
+	fmt.Println("=== Pomogori Stats ===")
+	fmt.Println()
+	fmt.Println("Today:")
+	fmt.Printf("  Work:  %s (%d sessions)\n", formatDurationLong(todayWork), countToday(entries, "work"))
+	fmt.Printf("  Break: %s\n", formatDurationLong(todayBreak))
+	fmt.Println()
+	fmt.Println("All Time:")
+	fmt.Printf("  Work:  %s (%d sessions)\n", formatDurationLong(totalWork), workCount)
+	fmt.Printf("  Break: %s (%d sessions)\n", formatDurationLong(totalBreak), breakCount)
+}
+
+func countToday(entries []historyEntry, sessionType string) int {
+	today := time.Now().Truncate(24 * time.Hour)
+	count := 0
+	for _, e := range entries {
+		if e.sessionType == sessionType && time.Unix(e.timestamp, 0).After(today) {
+			count++
+		}
+	}
+	return count
+}
+
+func formatDurationLong(seconds int) string {
+	h := seconds / 3600
+	m := (seconds % 3600) / 60
+
+	if h > 0 {
+		return fmt.Sprintf("%dh %dm", h, m)
+	}
+	return fmt.Sprintf("%dm", m)
 }
 
 func readState() (state, error) {
