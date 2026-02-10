@@ -77,20 +77,33 @@ pomogori integrates seamlessly with i3 to provide visual timer feedback in your 
 
 ### i3blocks Status Bar Integration
 
-The `pomogori i3blocks` command outputs formatted status for i3blocks:
-- 🍅 MM:SS - Active work session
+pomogori provides two i3blocks commands for comprehensive status bar integration:
+
+**Timer Display** (`pomogori i3blocks`):
+- ⏱️ MM:SS - Active work session
 - ☕ MM:SS - Active break session
 - ⏸️ - Paused indicator
 - (no output when stopped/complete)
 
+**Daily Counter** (`pomogori i3blocks-count`):
+- 🍅N - Number of completed work sessions today
+- Only visible when you've completed at least one session
+- Green color for progress indication
+
 #### Setup i3blocks
 
-1. Add pomogori to your i3blocks configuration (`~/.config/i3/i3blocks.conf`):
+1. Add both blocks to your i3blocks configuration (`~/.config/i3/i3blocks.conf`):
 
 ```ini
+# Live timer display
 [pomo]
 command=/path/to/pomogori i3blocks
 interval=1
+
+# Daily completion counter
+[pomo-count]
+command=/path/to/pomogori i3blocks-count
+interval=60
 ```
 
 2. Restart i3blocks:
@@ -99,7 +112,7 @@ killall i3blocks
 i3-msg restart
 ```
 
-The timer will now appear in your status bar and update every second.
+Your status bar will now show both the active timer (when running) and your daily completion count.
 
 ### i3 Keybinding Integration
 
@@ -138,14 +151,15 @@ Reload i3 config: `$mod+Shift+r`
 ### Complete i3 Workflow Example
 
 1. Press `$mod+g` then `w` - Start 25-minute work session
-2. Status bar shows: 🍅 24:58
+2. Status bar shows: ⏱️ 24:58
 3. Work on your task - timer counts down in status bar
 4. Need a quick break? `$mod+g` then `p` - Pause timer
-5. Status bar shows: 🍅 15:23 ⏸️
+5. Status bar shows: ⏱️ 15:23 ⏸️
 6. Back to work? `$mod+g` then `r` - Resume timer
 7. Timer completes - Desktop notification appears
-8. Press `$mod+g` then `b` - Start 5-minute break
-9. Status bar shows: ☕ 04:58
+8. Status bar updates to: 🍅1 (completion counter appears!)
+9. Press `$mod+g` then `b` - Start 5-minute break
+10. Status bar shows: ☕ 04:58 | 🍅1
 
 ## Commands
 
@@ -160,7 +174,8 @@ Reload i3 config: `$mod+Shift+r`
 | `stop` | - | Stop and discard current timer |
 | `stats` | - | Show session statistics |
 | `config` | - | Show configuration |
-| `i3blocks` | `i3b` | Output status for i3blocks |
+| `i3blocks` | `i3b` | Output current timer for i3blocks |
+| `i3blocks-count` | `i3bc` | Output completed work count for i3blocks |
 | `help` | `h` | Show help message |
 | `version` | `v` | Show version |
 
