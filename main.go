@@ -145,6 +145,9 @@ func main() {
 	case "i3blocks", "i3b":
 		i3blocks()
 
+	case "i3blocks-count", "i3bc":
+		i3blocksCount()
+
 	case "version", "v", "-v", "--version":
 		fmt.Printf("pomogori %s\n", version)
 
@@ -169,17 +172,19 @@ USAGE
     pomogori <command> [options]
 
 COMMANDS
-    work, w      Start a work session (default: %d minutes)
-    break, b     Start a break session (default: %d minutes)
-    status, s    Show current timer status
-    pause, p     Pause the current timer
-    resume, r    Resume a paused timer
-    watch        Watch timer with live countdown display
-    stop         Stop and discard the current timer
-    stats        Show session statistics
-    config       Show configuration and file paths
-    help, h      Show this help message
-    version, v   Show version
+    work, w              Start a work session (default: %d minutes)
+    break, b             Start a break session (default: %d minutes)
+    status, s            Show current timer status
+    pause, p             Pause the current timer
+    resume, r            Resume a paused timer
+    watch                Watch timer with live countdown display
+    stop                 Stop and discard the current timer
+    stats                Show session statistics
+    config               Show configuration and file paths
+    i3blocks, i3b        Show current timer for i3blocks
+    i3blocks-count, i3bc Show completed work count for i3blocks
+    help, h              Show this help message
+    version, v           Show version
 
 OPTIONS
     -d <minutes>   Set custom duration for work/break
@@ -191,6 +196,7 @@ EXAMPLES
     pomogori b -d 15           Start a 15-minute break
     pomogori watch             Watch the timer countdown
     pomogori status            Check remaining time
+    pomogori i3bc              Check today's completed count
 
 WORKFLOW
     1. pomogori work           Start working
@@ -504,6 +510,24 @@ func countToday(entries []historyEntry, sessionType string) int {
 	return count
 }
 
+func getTodayWorkCount() int {
+	entries := readHistory()
+	if len(entries) == 0 {
+		return 0
+	}
+
+	today := time.Now().Truncate(24 * time.Hour)
+	count := 0
+
+	for _, e := range entries {
+		if e.sessionType == "work" && time.Unix(e.timestamp, 0).After(today) {
+			count++
+		}
+	}
+
+	return count
+}
+
 func formatDurationLong(seconds int) string {
 	h := seconds / 3600
 	m := (seconds % 3600) / 60
@@ -587,7 +611,7 @@ func i3blocks() {
 		return // No output when complete
 	}
 
-	icon := "🍅"
+	icon := "⏱️"
 	if s.sessionType == "break" {
 		icon = "☕"
 	}
@@ -598,4 +622,14 @@ func i3blocks() {
 	} else {
 		fmt.Printf("%s %s\n", icon, timeStr)
 	}
+}
+
+func i3blocksCount() {
+	count := getTodayWorkCount()
+	if count == 0 {
+		return // No output when no completions
+	}
+	fmt.Printf("🍅%d\n", count)     // full_text
+	fmt.Printf("🍅%d\n", count)     // short_text
+	fmt.Println("#86C232")          // color (green)
 }
