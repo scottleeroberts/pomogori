@@ -217,6 +217,11 @@ VERSION
 }
 
 func start(sessionType string, duration int) {
+	// Check and record any completed session first
+	if checkAndRecordCompletion() {
+		fmt.Println("Previous session recorded")
+	}
+
 	now := time.Now().Unix()
 	// Store: startTime|duration|sessionType|status
 	stateStr := fmt.Sprintf("%d|%d|%s|running", now, duration, sessionType)
@@ -225,6 +230,12 @@ func start(sessionType string, duration int) {
 }
 
 func status() {
+	// Check and record any completed session first
+	if checkAndRecordCompletion() {
+		fmt.Println("Session complete and recorded!")
+		return
+	}
+
 	s, err := readState()
 	if err != nil {
 		fmt.Println("No timer running")
@@ -412,6 +423,32 @@ func recordSession(sessionType string, duration int) {
 	f.WriteString(entry)
 }
 
+// checkAndRecordCompletion checks if there's a completed session and records it
+// Returns true if a session was completed and recorded
+func checkAndRecordCompletion() bool {
+	s, err := readState()
+	if err != nil {
+		return false
+	}
+
+	// Skip if paused - user might want to resume
+	if s.paused {
+		return false
+	}
+
+	elapsed := int(time.Now().Unix() - s.startTime)
+	remaining := s.duration - elapsed
+
+	if remaining <= 0 {
+		// Session is complete - record it and clean up
+		recordSession(s.sessionType, s.duration)
+		os.Remove(stateFile)
+		return true
+	}
+
+	return false
+}
+
 func readHistory() []historyEntry {
 	data, err := os.ReadFile(historyFile)
 	if err != nil {
@@ -594,6 +631,11 @@ func notify(title, message string) {
 }
 
 func i3blocks() {
+	// Check and record any completed session first
+	if checkAndRecordCompletion() {
+		return // No output after completion
+	}
+
 	s, err := readState()
 	if err != nil {
 		return // No output when no timer
@@ -625,6 +667,9 @@ func i3blocks() {
 }
 
 func i3blocksCount() {
+	// Check and record any completed session first
+	checkAndRecordCompletion()
+
 	count := getTodayWorkCount()
 	if count == 0 {
 		return // No output when no completions
